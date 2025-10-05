@@ -1,6 +1,6 @@
 import http from 'k6/http';
-export const options = { vus: 20, duration: '30s' };
+export const options = { vus: 100, duration: '30s' };
 export default function () {
-  http.get('http://pspd.local/a/hello?name=pspd');
-  http.get('http://pspd.local/b/numbers?count=10&delay_ms=5');
+  http.get('http://localhost:8080/a/hello?name=pspd');
+  http.get('http://localhost:8080/b/numbers?count=10&delay_ms=5');
 }

@@ -122,6 +122,8 @@ kind: Ingress
 metadata:
   name: p-ingress
   namespace: pspd
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
 spec:
   rules:
     - host: pspd.local
@@ -217,7 +219,6 @@ spec:
             - { name: B_REST, value: "http://b-rest-svc.pspd.svc.cluster.local:50062" }
             - { name: PORT, value: "8081" }
           ports: [ { containerPort: 8081 } ]
-          # Probes mínimas via TCP para subir sem precisar /healthz
           readinessProbe:
             tcpSocket: { port: 8081 }
             initialDelaySeconds: 5
@@ -245,6 +246,8 @@ kind: Ingress
 metadata:
   name: p-rest-ingress
   namespace: pspd
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
 spec:
   rules:
     - host: pspd-rest.local
@@ -258,7 +261,7 @@ spec:
                 port: { number: 80 }
 YAML
 
-# --------- [2.5] Sanitizar .dockerignore (evita contexto = 2B) ----------
+# --------- [2.5] Sanitizar .dockerignore ----------
 if [ -f .dockerignore ] && grep -qE '^[[:space:]]*\*[[:space:]]*$' .dockerignore; then
   log "→ Ajustando .dockerignore que ignorava tudo (backup em .dockerignore.bak)…"
   cp .dockerignore .dockerignore.bak || true
@@ -282,10 +285,8 @@ log "[4/7] Garantindo Minikube…"
 
 USE_IMAGE_LOAD=false 
 
-# Docker acessível?
 docker info >/dev/null 2>&1 || { log "❌ Docker não acessível. Abra o Docker Desktop e tente de novo."; exit 1; }
 
-# Se o cluster não existir, cria do zero
 if ! minikube status -p minikube >/dev/null 2>&1; then
   log "→ Nenhum cluster encontrado. Criando novo…"
   minikube delete --all --purge >/dev/null 2>&1 || true
@@ -296,7 +297,6 @@ else
   log "→ Cluster existente detectado. Pulando criação."
 fi
 
-# Habilita o ingress (só se o cluster estiver rodando)
 if minikube status -p minikube | grep -q "Running"; then
   log "→ Habilitando addon ingress…"
   minikube -p minikube addons enable ingress >/dev/null
@@ -305,7 +305,6 @@ else
   exit 1
 fi
 
-# Configura contexto
 kubectl config use-context minikube >/dev/null
 
 # --------- [4.5] Conectar Docker ao Minikube ----------
@@ -317,21 +316,17 @@ else
   USE_IMAGE_LOAD=true
 fi
 
-
-# --------- [5] Build das imagens (contexto = RAIZ com -f) ----------
+# --------- [5] Build das imagens ----------
 log "[5/7] Build das imagens gRPC/REST…"
 
-# gRPC
 docker build -t a-service:local -f services/a_py/Dockerfile .
 docker build -t b-service:local -f services/b_py/Dockerfile .
 docker build -t p-gateway:local -f gateway_p_node/Dockerfile .
 
-# REST
 [ -f services/a_rest/Dockerfile ] && docker build -t a-rest-service:local   -f services/a_rest/Dockerfile . || true
 [ -f services/b_rest/Dockerfile ] && docker build -t b-rest-service:local   -f services/b_rest/Dockerfile . || true
 [ -f gateway_p_rest_node/Dockerfile ] && docker build -t p-rest-gateway:local -f gateway_p_rest_node/Dockerfile . || true
 
-# Se não usamos docker-env, carregue as imagens no cluster
 if [ "$USE_IMAGE_LOAD" = true ]; then
   log "→ Carregando imagens no cluster (minikube image load)…"
   minikube -p minikube image load a-service:local || true
@@ -341,7 +336,6 @@ if [ "$USE_IMAGE_LOAD" = true ]; then
   minikube -p minikube image load b-rest-service:local || true
   minikube -p minikube image load p-rest-gateway:local || true
 fi
-
 
 # --------- [6] Aplicar manifests ----------
 log "[6/7] Aplicando K8s (gRPC + REST)…"
@@ -355,8 +349,6 @@ kubectl apply -f k8s/rest/b-rest.yaml || true
 kubectl apply -f k8s/rest/p-rest.yaml || true
 kubectl apply -f k8s/rest/ingress-rest.yaml || true
 
-
-# --------- [6.5] Aguardar rollouts ----------
 wait_rollout() {
   local ns="$1"; shift
   for d in "$@"; do
@@ -370,7 +362,6 @@ wait_rollout() {
 
 wait_rollout pspd a-deploy b-deploy p-deploy
 wait_rollout pspd a-rest-deploy b-rest-deploy p-rest-deploy
-
 
 # --------- [7] Status final ----------
 log "[7/7] Status:"
