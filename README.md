@@ -1,16 +1,19 @@
-# Projeto PSPD: Comunicação entre HTTP e gRPC com Kubernetes
+# 🧩 Projeto PSPD: Comunicação entre HTTP e gRPC com Kubernetes
 
-Este repositório demonstra uma arquitetura de microsserviços onde um cliente Web se comunica com um gateway via HTTP, que por sua vez se comunica com dois serviços usando gRPC (A e B). Também incluímos versão REST equivalente para comparação.
+Este repositório demonstra uma arquitetura de microsserviços onde um cliente Web se comunica com um gateway via **HTTP**, que por sua vez se comunica com dois serviços backend via **gRPC (A e B)**.  
+Também foi implementada uma versão equivalente em **REST** para fins de comparação de desempenho.
 
 ---
 
 ## 🔧 Tecnologias usadas
 
-- Node.js (HTTP + gRPC + REST)
-- gRPC
-- Kubernetes (Minikube)
-- Docker
-- curl
+- **Node.js** (Gateway HTTP + gRPC + REST)
+- **Python / FastAPI / gRPC**
+- **Protocol Buffers (Protobuf)**
+- **Kubernetes (Minikube)**
+- **Docker**
+- **k6** (teste de carga)
+- **Matplotlib / Python** (análise gráfica de desempenho)
 
 ---
 
@@ -20,80 +23,154 @@ Este repositório demonstra uma arquitetura de microsserviços onde um cliente W
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) com suporte ao WSL ativado
 - [kubectl](https://kubernetes.io/docs/tasks/tools/)
 - [minikube](https://minikube.sigs.k8s.io/docs/start/)
-- `git`, `curl` e `make` instalados
+- [k6](https://grafana.com/docs/k6/latest/) instalado
+- Python 3.12+ com `matplotlib` e `pandas`
 
 ---
 
-## ▶️ Passo a passo funcional testado
+## ▶️ Execução completa do projeto
 
-### 0. Clonar o repositório e entrar na pasta
+### 1️⃣ Clonar e configurar
+
 ```bash
 git clone https://github.com/edilbertocantuaria/atividade-extraclasse-1-pspd.git
 cd atividade-extraclasse-1-pspd
+chmod +x setup.sh
 ```
 
-### 1. Rodar o script de configuração completa
-Esse script irá gerar todos os arquivos `YAML`, fazer build local das imagens e aplicar no cluster.
+### 2️⃣ Rodar o script principal
+
+Cria os manifests Kubernetes, builda as imagens e aplica no cluster:
+
 ```bash
-chmod +x setup.sh
 ./setup.sh
 ```
 
-Esse script já cuida do build de todas as imagens com o Docker apontado para o Minikube via:
-```bash
-eval $(minikube -p minikube docker-env)
-```
+O script realiza:
+- Build automático das imagens Docker
+- Configuração do namespace `pspd`
+- Deploy dos pods e services (A, B, P, REST)
+- Habilitação do Ingress Controller
 
-### 2. Expor os serviços: duas formas possíveis
+---
 
-#### ✅ Opção garantida (port-forward)
-Obs.: rode cada linha em um terminal diferente (não precisa está na pasta do projeto)
+## 🌐 Acesso aos serviços
+
+### ✅ Opção garantida (port-forward)
 ```bash
 kubectl -n pspd port-forward svc/p-svc 8080:80
 kubectl -n pspd port-forward svc/p-rest-svc 8081:80
 ```
 
 Acesse:
-- `http://localhost:8080` → Gateway gRPC
-- `http://localhost:8081` → Gateway REST
+- gRPC Gateway → http://localhost:8080  
+- REST Gateway → http://localhost:8081
 
-Caso queira verificar se está com sucesso:
-- `http://localhost:8080//healthz` → Gateway gRPC
-- `http://localhost:8081//healthz` → Gateway REST
+### 🧪 Opção via Minikube (domínios locais)
 
-## 3. Testar os serviços
+Verifique o IP:
 ```bash
-curl "http://localhost:8080/a/hello?name=FernandoWilliam"
-curl "http://localhost:8080/b/numbers?count=5&delay_ms=100"
-
-curl "http://localhost:8081/a/hello?name=FernandoWilliam"
-curl "http://localhost:8081/b/numbers?count=5&delay_ms=100"
+minikube ip
 ```
 
-## 4. Testes comparativos gRPC vs REST
-Na raiz do projeto, execute
-```bash
-k6 run load/load_grpc_http.js
-k6 run load/load_rest_http.js
+Adicione no arquivo `hosts`:
 ```
+192.168.49.2 pspd.local
+192.168.49.2 pspd-rest.local
+```
+
+---
+
+## ⚙️ Testes de carga e desempenho
+
+Foram realizados testes de desempenho com o **k6** para comparar o comportamento das versões **gRPC** e **REST** sob diferentes níveis de carga (20 e 100 usuários simultâneos).
+
+### 🔹 Teste gRPC
+```bash
+k6 run load_grpc_http.js
+```
+
+### 🔹 Teste REST
+```bash
+k6 run load_rest_http.js
+```
+
+Cada teste executa durante **30 segundos**, simulando múltiplos usuários acessando:
+- `/a/hello` (requisição unária)
+- `/b/numbers` (requisição streaming)
+
+---
+
+## 📊 Resultados dos testes
+
+| Métrica | gRPC (100 VUs) | REST (100 VUs) |
+|----------|----------------|----------------|
+| Duração | 30 s | 30 s |
+| Requisições processadas | 10.462 | 21.352 |
+| Taxa média (req/s) | 355,9 | 735,8 |
+| Latência média | 281,56 ms | 139,42 ms |
+| Falhas | 0% | 0% |
+| Dados recebidos | 3,2 MB | 6,4 MB |
+
+📈 Os resultados mostram que:
+- REST tem menor latência e maior taxa de requisições por segundo (vantagem no acesso externo).
+- gRPC é mais eficiente internamente, com metade do volume de dados transmitidos.
+- Ambos os sistemas mantiveram 0% de falhas, comprovando a estabilidade da orquestração Kubernetes.
+
+---
+
+## 📉 Geração de gráficos comparativos
+
+Todos os resultados são registrados automaticamente em `test_results/` após cada execução.  
+Para gerar gráficos de desempenho:
+
+```bash
+python test_results/plot_results.py
+```
+
+Isso cria figuras em `.png` com:
+- **Latência média (ms)**
+- **Throughput (req/s)**
+- **Volume de dados transmitidos**
+
+Os gráficos ajudam a visualizar o impacto do aumento de usuários simultâneos e o comportamento de cada protocolo.
+
+---
+
+## 🧠 Conclusões
+
+- O **REST** se mostrou mais rápido do ponto de vista do cliente externo.
+- O **gRPC** mantém **eficiência binária e estabilidade interna** mesmo sob alta carga.
+- A arquitetura híbrida usada (REST + gRPC) une **acessibilidade e desempenho**, sendo ideal para aplicações distribuídas modernas.
+- O uso de **Kubernetes** garantiu alta disponibilidade, balanceamento de carga e isolamento entre serviços.
 
 ---
 
 ## 📁 Estrutura do projeto
+
 ```
 atividade-extraclasse-1-pspd/
-├── services/               # Códigos dos serviços A e B (gRPC)
-├── gateway_p_rest_node/    # Gateway REST
-├── proto/                  # Arquivos .proto
-├── k8s/                    # Arquivos YAML (gerados pelo script)
-├── setup.sh                # Script completo de setup
-└── README.md               # Este arquivo
+├── gateway_p_node/          # Gateway HTTP → gRPC
+├── gateway_p_rest_node/     # Gateway HTTP → REST
+├── services/a_py/           # Serviço A (gRPC)
+├── services/b_py/           # Serviço B (gRPC)
+├── services/a_rest/         # Serviço A (REST)
+├── services/b_rest/         # Serviço B (REST)
+├── proto/                   # Arquivos .proto
+├── k8s/                     # Manifests Kubernetes
+├── test_results/            # Dados e gráficos de desempenho
+├── setup.sh                 # Script de automação completa
+└── README.md                # Este arquivo
 ```
 
 ---
 
-## ✅ Status final esperado
+## 🧩 Créditos
 
-- Todos os pods com status `Running`
-- `http://localhost:8080` e `http://localhost:8081` funcionando
-- Comunicação: HTTP → Gateway → Serviços via gRPC
+Trabalho desenvolvido para a disciplina **Programação para Sistemas Paralelos e Distribuídos (PSPD)** — Universidade de Brasília (UnB), sob orientação do **Prof. Fernando William Cruz**.
+
+Integrantes:
+- Débora Caires de Souza Moreira  
+- Edilberto Almeida Cantuaria  
+- Levi de Oliveira Queiroz  
+- Wolfgang Friedrich Stein
