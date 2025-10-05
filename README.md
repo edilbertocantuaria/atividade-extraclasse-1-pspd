@@ -1,4 +1,3 @@
-
 # Projeto PSPD: Comunicação entre HTTP e gRPC com Kubernetes
 
 Este repositório demonstra uma arquitetura de microsserviços onde um cliente Web se comunica com um gateway via HTTP, que por sua vez se comunica com dois serviços usando gRPC (A e B). Também incluímos versão REST equivalente para comparação.
@@ -63,17 +62,7 @@ Acesse:
 minikube tunnel
 ```
 
-Se funcionar, os serviços serão expostos via IP da máquina virtual Minikube.
-
-##### ⚠️ Liberar portas no firewall do Windows
-
-Se ocorrer erro com o `minikube tunnel`, pode ser necessário:
-
-1. Abrir o **Painel de Controle** > **Sistema e Segurança** > **Firewall do Windows Defender**
-2. Clique em **Regras de Entrada** > **Nova Regra**
-3. Escolha **Porta**, clique em **Avançar**
-4. Marque **TCP** e digite `80, 443`
-5. Permitir a conexão > Avançar > selecione todos os perfis > nomeie como `Minikube Tunnel`
+Se falhar, é por bloqueio de portas (80, 443). Tente o método acima.
 
 ##### (Opcional) Alterar o arquivo `hosts` do Windows
 
@@ -99,7 +88,58 @@ Teste o acesso:
 
 Se não funcionar, continue com `localhost:8080` e `localhost:8081` via `port-forward`.
 
-### 3. Testar os serviços
+---
+
+## 🛡️ (Opcional, mas necessário) Liberar a porta 80 no Firewall do Windows
+
+Se você pretende usar o `minikube tunnel` para acessar via domínios como `pspd.local`, será necessário liberar a porta 80 no firewall do Windows. Siga esse passo a passo:
+
+### 1. Abra o **Painel de Controle** do Windows
+- Pressione `Win + S` e digite: `firewall`
+- Abra: **Firewall do Windows Defender com Segurança Avançada**
+
+### 2. No menu à esquerda, clique em:
+```
+Regras de Entrada
+```
+
+### 3. No menu à direita, clique em:
+```
+Nova Regra...
+```
+
+### 4. Selecione:
+```
+Porta → Avançar
+```
+
+### 5. Escolha:
+- Tipo: **TCP**
+- Porta específica: `80`
+- Clique em **Avançar**
+
+### 6. Selecione:
+```
+Permitir a conexão
+```
+
+### 7. Marque os perfis:
+```
+✔️ Domínio ✔️ Particular ✔️ Público
+```
+
+### 8. Nomeie a regra:
+```
+Minikube Tunnel HTTP (porta 80)
+```
+
+Clique em **Concluir**
+
+✅ (Opcional) Repita o processo para a porta **443** se quiser expor HTTPS.
+
+---
+
+## 3. Testar os serviços
 ```bash
 curl "http://localhost:8080/a/hello?name=FernandoWilliam"
 curl "http://localhost:8080/b/numbers?count=5&delay_ms=100"
