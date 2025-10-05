@@ -1,44 +1,120 @@
-# Placeholder README
 
-# REST Variant & Load Tests (Addendum)
+# Projeto PSPD: Comunicação entre HTTP e gRPC com Kubernetes
 
-## Build REST images (inside minikube docker-env)
+Este repositório demonstra uma arquitetura de microsserviços onde um cliente Web se comunica com um gateway via HTTP, que por sua vez se comunica com dois serviços usando gRPC (A e B). Também incluímos versão REST equivalente para comparação.
+
+---
+
+## 🔧 Tecnologias usadas
+
+- Node.js (HTTP + gRPC + REST)
+- gRPC
+- Kubernetes (Minikube)
+- Docker
+- curl
+
+---
+
+## 📦 Pré-requisitos
+
+- WSL com Ubuntu
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) com suporte ao WSL ativado
+- [kubectl](https://kubernetes.io/docs/tasks/tools/)
+- [minikube](https://minikube.sigs.k8s.io/docs/start/)
+- `git`, `curl` e `make` instalados
+
+---
+
+## ▶️ Passo a passo funcional testado
+
+### 0. Clonar o repositório e entrar na pasta
 ```bash
-docker build -t a-rest-service:local -f services/a_rest/Dockerfile services/a_rest
-docker build -t b-rest-service:local -f services/b_rest/Dockerfile services/b_rest
-docker build -t p-rest-gateway:local -f gateway_p_rest_node/Dockerfile gateway_p_rest_node
+unzip pspd-grpc-k8s-rest.zip
+cd pspd-grpc-k8s-rest
 ```
 
-## Deploy REST stack
+### 1. Rodar o script de configuração completa
+Esse script irá gerar todos os arquivos `YAML`, fazer build local das imagens e aplicar no cluster.
 ```bash
-kubectl apply -f k8s/rest/a-rest.yaml
-kubectl apply -f k8s/rest/b-rest.yaml
-kubectl apply -f k8s/rest/p-rest.yaml
-minikube addons enable ingress   # se ainda não fez
-kubectl apply -f k8s/rest/ingress-rest.yaml
+chmod +x setup.sh
+./setup.sh
 ```
 
-## /etc/hosts
-Adicione também:
-```
-<minikube_ip> pspd-rest.local
-```
-
-## Testar REST
-```
-http://pspd-rest.local/
-http://pspd-rest.local/a/hello?name=Edilberto
-http://pspd-rest.local/b/numbers?count=10&delay_ms=50
+Esse script já cuida do build de todas as imagens com o Docker apontado para o Minikube via:
+```bash
+eval $(minikube -p minikube docker-env)
 ```
 
-## Rodar k6 (comparar gRPC-backed x REST)
-# gRPC (via Gateway P HTTP)
-k6 run load/load_grpc_http.js
+### 2. Expor os serviços: duas formas possíveis
 
-# REST (via Gateway P-REST HTTP)
-k6 run load/load_rest_http.js
+#### ✅ Opção garantida (port-forward)
+```bash
+kubectl -n pspd port-forward svc/p-svc 8080:80
+kubectl -n pspd port-forward svc/p-rest-svc 8081:80
+```
 
-# Copie média, p(95) e RPS para uma tabela do relatório.
-# atividade-extraclasse-1-pspd
-# atividade-extraclasse-1-pspd
-# atividade-extraclasse-1-pspd
+Acesse:
+- `http://localhost:8080` → Gateway gRPC
+- `http://localhost:8081` → Gateway REST
+
+#### 🧪 Tentativa com minikube tunnel (sujeito a firewall)
+```bash
+minikube tunnel
+```
+
+Se falhar, é por bloqueio de portas (80, 443). Tente o método acima.
+
+##### (Opcional) Alterar o arquivo `hosts` do Windows
+
+1. Abrir o Bloco de Notas como **Administrador**
+2. Ir em `Arquivo > Abrir` e navegar até:
+   ```
+   C:\Windows\System32\drivers\etc\hosts
+   ```
+3. Adicionar ao final:
+   ```
+   192.168.49.2 pspd.local
+   192.168.49.2 pspd-rest.local
+   ```
+
+Verifique o IP do minikube com:
+```bash
+minikube ip
+```
+
+Teste o acesso:
+- http://pspd.local
+- http://pspd-rest.local
+
+Se não funcionar, continue com `localhost:8080` e `localhost:8081` via `port-forward`.
+
+### 3. Testar os serviços
+```bash
+curl "http://localhost:8080/a/hello?name=FernandoWilliam"
+curl "http://localhost:8080/b/numbers?count=5&delay_ms=100"
+
+curl "http://localhost:8081/a/hello?name=FernandoWilliam"
+curl "http://localhost:8081/b/numbers?count=5&delay_ms=100"
+```
+
+---
+
+## 📁 Estrutura do projeto
+```
+pspd-grpc-k8s-rest/
+├── services/               # Códigos dos serviços A e B (gRPC)
+├── gateway_p_rest_node/    # Gateway REST
+├── proto/                  # Arquivos .proto
+├── k8s/                    # Arquivos YAML (gerados pelo script)
+├── setup.sh                # Script completo de setup
+└── README.md               # Este arquivo
+```
+
+---
+
+## ✅ Status final esperado
+
+- Todos os pods com status `Running`
+- `http://localhost:8080` e `http://localhost:8081` funcionando
+- Comunicação: HTTP → Gateway → Serviços via gRPC
+

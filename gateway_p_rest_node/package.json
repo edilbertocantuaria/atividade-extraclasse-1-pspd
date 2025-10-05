@@ -1,0 +1,12 @@
+{
+  "name": "gateway-p-rest-node",
+  "version": "1.0.0",
+  "main": "server.js",
+  "type": "module",
+  "dependencies": {
+    "express": "^4.19.2",
+    "morgan": "^1.10.0",
+    "cors": "^2.8.5",
+    "node-fetch": "^3.3.2"
+  }
+}
