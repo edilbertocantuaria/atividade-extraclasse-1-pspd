@@ -29,7 +29,6 @@ Este repositório demonstra uma arquitetura de microsserviços onde um cliente W
 ### 0. Clonar o repositório e entrar na pasta
 ```bash
 git clone https://github.com/edilbertocantuaria/atividade-extraclasse-1-pspd.git
-unzip atividade-extraclasse-1-pspd.zip
 cd atividade-extraclasse-1-pspd
 ```
 
@@ -90,7 +89,7 @@ Se não funcionar, continue com `localhost:8080` e `localhost:8081` via `port-fo
 
 ---
 
-## 🛡️ (Opcional, mas necessário) Liberar a porta 80 no Firewall do Windows
+## 🛡️ (Opcional, mas pode ser necessário) Liberar a porta 80 no Firewall do Windows
 
 Se você pretende usar o `minikube tunnel` para acessar via domínios como `pspd.local`, será necessário liberar a porta 80 no firewall do Windows. Siga esse passo a passo:
 
