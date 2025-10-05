@@ -1,11 +1,21 @@
-# === setup.sh: cria manifests, faz build gRPC, aplica tudo e valida ===
+#!/usr/bin/env bash
+# === setup.sh: cria manifests, garante minikube, builda imagens, aplica e valida ===
 
 set -euo pipefail
 
-echo "[1/7] Criando pastas…"
+log() { echo -e "$1" >&2; }
+
+# --------- [0] Pré-checagens ----------
+command -v docker >/dev/null || { log "❌ Docker não encontrado no PATH."; exit 1; }
+command -v kubectl >/dev/null || { log "❌ kubectl não encontrado no PATH."; exit 1; }
+command -v minikube >/dev/null || { log "❌ minikube não encontrado no PATH."; exit 1; }
+
+# --------- [1] Pastas ----------
+log "[1/7] Criando pastas…"
 mkdir -p k8s k8s/rest
 
-echo "[2/7] Escrevendo manifests…"
+# --------- [2] Manifests ----------
+log "[2/7] Escrevendo manifests…"
 cat > k8s/namespace.yaml <<'YAML'
 apiVersion: v1
 kind: Namespace
@@ -196,7 +206,8 @@ spec:
   replicas: 1
   selector: { matchLabels: { app: p-rest } }
   template:
-    metadata: { labels: { app: p-rest } }
+    metadata:
+      labels: { app: p-rest }
     spec:
       containers:
         - name: p-rest
@@ -239,32 +250,100 @@ spec:
                 port: { number: 80 }
 YAML
 
-echo "[3/7] Conferindo arquivos:"
+log "[3/7] Conferindo arquivos:"
 ls -R k8s
 
-echo "[4/7] Apontando Docker para o minikube…"
-eval $(minikube -p minikube docker-env)
+# --------- [4] Garantindo Minikube ----------
+log "[4/7] Garantindo Minikube…"
 
-echo "[5/7] Build das imagens gRPC (faltavam):"
-docker build -t a-service:local -f services/a_py/Dockerfile .
-docker build -t b-service:local -f services/b_py/Dockerfile .
-docker build -t p-gateway:local -f gateway_p_node/Dockerfile .
+# Docker acessível?
+docker info >/dev/null 2>&1 || { log "❌ Docker não acessível. Abra o Docker Desktop e tente de novo."; exit 1; }
 
-echo "[6/7] Aplicando gRPC stack…"
+# Sobe minikube se necessário
+if ! minikube -p minikube status >/dev/null 2>&1; then
+  log "→ Iniciando minikube (perfil: minikube)…"
+  minikube start -p minikube --driver=docker --cpus=2 --memory=4096 >/tmp/minikube_start.log 2>&1 &
+  PID=$!
+  echo "→ Inicializando Minikube em background (isso pode levar 2–5 minutos)…"
+  wait $PID
+fi
+
+# Habilita ingress e garante contexto
+minikube -p minikube addons enable ingress >/dev/null
+kubectl config use-context minikube >/dev/null
+
+# Tenta apontar docker para o daemon do minikube
+USE_IMAGE_LOAD=false
+if eval "$(minikube -p minikube docker-env)"; then
+  log "→ Docker apontado para o daemon do minikube."
+else
+  log "→ Não foi possível redirecionar docker-env. Vou usar 'minikube image load'."
+  USE_IMAGE_LOAD=true
+fi
+
+log "[5/7] Build das imagens gRPC/REST…"
+
+# Build pelo RAIZ do repo, apontando o Dockerfile de cada serviço (-f)
+docker build -t a-service:local    -f services/a_py/Dockerfile .
+docker build -t b-service:local    -f services/b_py/Dockerfile .
+docker build -t p-gateway:local    -f gateway_p_node/Dockerfile .
+
+# REST (se existirem)
+[ -f services/a_rest/Dockerfile ]      && docker build -t a-rest-service:local -f services/a_rest/Dockerfile . || true
+[ -f services/b_rest/Dockerfile ]      && docker build -t b-rest-service:local -f services/b_rest/Dockerfile . || true
+[ -f gateway_p_rest_node/Dockerfile ]  && docker build -t p-rest-gateway:local -f gateway_p_rest_node/Dockerfile . || true
+
+# Se não usamos docker-env, carregue as imagens no cluster
+if [ "$USE_IMAGE_LOAD" = true ]; then
+  log "→ Carregando imagens no cluster (minikube image load)…"
+  minikube -p minikube image load a-service:local || true
+  minikube -p minikube image load b-service:local || true
+  minikube -p minikube image load p-gateway:local || true
+  minikube -p minikube image load a-rest-service:local || true
+  minikube -p minikube image load b-rest-service:local || true
+  minikube -p minikube image load p-rest-gateway:local || true
+fi
+
+
+
+# --------- [6] Aplicar manifests ----------
+log "[6/7] Aplicando K8s (gRPC + REST opcional)…"
 kubectl apply -f k8s/namespace.yaml
 kubectl apply -f k8s/a.yaml
 kubectl apply -f k8s/b.yaml
 kubectl apply -f k8s/p.yaml
 kubectl apply -f k8s/ingress.yaml
-
-echo "[6.1/7] Aplicando REST stack (opcional)…"
 kubectl apply -f k8s/rest/a-rest.yaml || true
 kubectl apply -f k8s/rest/b-rest.yaml || true
 kubectl apply -f k8s/rest/p-rest.yaml || true
 kubectl apply -f k8s/rest/ingress-rest.yaml || true
 
-echo "[7/7] Status:"
-kubectl -n pspd get pods
+# --------- [6.5] Aguardar rollouts ----------
+wait_rollout() {
+  local ns="$1"; shift
+  for d in "$@"; do
+    log "→ Aguardando rollout: $d (ns=$ns)…"
+    # timeout de 180s para evitar travar
+    if ! kubectl -n "$ns" rollout status deploy/"$d" --timeout=180s; then
+      log "⚠️  Timeout no rollout de $d. Logs (últimas linhas):"
+      kubectl -n "$ns" logs deploy/"$d" --tail=80 || true
+    fi
+  done
+}
+
+wait_rollout pspd a-deploy b-deploy p-deploy
+wait_rollout pspd a-rest-deploy b-rest-deploy p-rest-deploy
+
+# --------- [7] Status final ----------
+log "[7/7] Status:"
+kubectl -n pspd get pods -o wide
 kubectl -n pspd get svc
 kubectl -n pspd get ingress
-echo "OK. Aguarde pods ficarem Running (10–40s)."
+
+MINIKUBE_IP="$(minikube -p minikube ip || true)"
+if [ -n "${MINIKUBE_IP:-}" ]; then
+  log "\n✅ Se necessário, adicione ao /etc/hosts:"
+  log "  $MINIKUBE_IP  pspd.local pspd-rest.local"
+fi
+
+log "OK. Aguarde pods ficarem Running/Ready (pode levar alguns segundos)."
