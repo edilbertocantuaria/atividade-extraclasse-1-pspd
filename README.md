@@ -29,8 +29,9 @@ Este repositório demonstra uma arquitetura de microsserviços onde um cliente W
 
 ### 0. Clonar o repositório e entrar na pasta
 ```bash
-unzip pspd-grpc-k8s-rest.zip
-cd pspd-grpc-k8s-rest
+git clone https://github.com/edilbertocantuaria/atividade-extraclasse-1-pspd.git
+unzip atividade-extraclasse-1-pspd.zip
+cd atividade-extraclasse-1-pspd
 ```
 
 ### 1. Rodar o script de configuração completa
@@ -101,7 +102,7 @@ curl "http://localhost:8081/b/numbers?count=5&delay_ms=100"
 
 ## 📁 Estrutura do projeto
 ```
-pspd-grpc-k8s-rest/
+atividade-extraclasse-1-pspd/
 ├── services/               # Códigos dos serviços A e B (gRPC)
 ├── gateway_p_rest_node/    # Gateway REST
 ├── proto/                  # Arquivos .proto
