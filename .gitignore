@@ -1,0 +1,9 @@
+# K8s manifests gerados pelo setup.sh
+k8s/*.yaml
+k8s/**/*.yaml
+k8s/
+
+
+# Mantém as pastas no repo (se usar .gitkeep)
+!k8s/.gitkeep
+!k8s/rest/.gitkeep

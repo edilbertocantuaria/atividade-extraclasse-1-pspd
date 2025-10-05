@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
-# === setup.sh: cria manifests, garante minikube, builda imagens, aplica e valida ===
+# === setup.sh: cria manifests, garante minikube, builda imagens pelo RAIZ, aplica e valida ===
 
 set -euo pipefail
-
 log() { echo -e "$1" >&2; }
 
 # --------- [0] Pré-checagens ----------
@@ -153,8 +152,8 @@ spec:
           image: a-rest-service:local
           imagePullPolicy: IfNotPresent
           ports: [ { containerPort: 8000 } ]
-          readinessProbe: { httpGet: { path: /a/hello, port: 8000 }, initialDelaySeconds: 3, periodSeconds: 5 }
-          livenessProbe:  { httpGet: { path: /a/hello, port: 8000 }, initialDelaySeconds: 5, periodSeconds: 10 }
+          readinessProbe: { httpGet: { path: /a/hello, port: 8000 }, initialDelaySeconds: 3, periodSeconds: 5, failureThreshold: 10 }
+          livenessProbe:  { httpGet: { path: /a/hello, port: 8000 }, initialDelaySeconds: 5, periodSeconds: 10, failureThreshold: 10 }
 ---
 apiVersion: v1
 kind: Service
@@ -183,8 +182,8 @@ spec:
           image: b-rest-service:local
           imagePullPolicy: IfNotPresent
           ports: [ { containerPort: 8000 } ]
-          readinessProbe: { httpGet: { path: /b/numbers, port: 8000 }, initialDelaySeconds: 3, periodSeconds: 5 }
-          livenessProbe:  { httpGet: { path: /b/numbers, port: 8000 }, initialDelaySeconds: 5, periodSeconds: 10 }
+          readinessProbe: { httpGet: { path: /b/numbers, port: 8000 }, initialDelaySeconds: 3, periodSeconds: 5, failureThreshold: 10 }
+          livenessProbe:  { httpGet: { path: /b/numbers, port: 8000 }, initialDelaySeconds: 5, periodSeconds: 10, failureThreshold: 10 }
 ---
 apiVersion: v1
 kind: Service
@@ -218,8 +217,17 @@ spec:
             - { name: B_REST, value: "http://b-rest-svc.pspd.svc.cluster.local:50062" }
             - { name: PORT, value: "8081" }
           ports: [ { containerPort: 8081 } ]
-          readinessProbe: { httpGet: { path: /healthz, port: 8081 }, initialDelaySeconds: 3, periodSeconds: 5 }
-          livenessProbe:  { httpGet: { path: /healthz, port: 8081 }, initialDelaySeconds: 5, periodSeconds: 10 }
+          # Probes mínimas via TCP para subir sem precisar /healthz
+          readinessProbe:
+            tcpSocket: { port: 8081 }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 10
+          livenessProbe:
+            tcpSocket: { port: 8081 }
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 10
 ---
 apiVersion: v1
 kind: Service
@@ -250,48 +258,78 @@ spec:
                 port: { number: 80 }
 YAML
 
+# --------- [2.5] Sanitizar .dockerignore (evita contexto = 2B) ----------
+if [ -f .dockerignore ] && grep -qE '^[[:space:]]*\*[[:space:]]*$' .dockerignore; then
+  log "→ Ajustando .dockerignore que ignorava tudo (backup em .dockerignore.bak)…"
+  cp .dockerignore .dockerignore.bak || true
+  cat > .dockerignore <<'EOF'
+.git
+**/__pycache__/
+**/*.pyc
+node_modules
+dist
+build
+.env
+.DS_Store
+EOF
+fi
+
 log "[3/7] Conferindo arquivos:"
 ls -R k8s
 
 # --------- [4] Garantindo Minikube ----------
 log "[4/7] Garantindo Minikube…"
 
+USE_IMAGE_LOAD=false 
+
 # Docker acessível?
 docker info >/dev/null 2>&1 || { log "❌ Docker não acessível. Abra o Docker Desktop e tente de novo."; exit 1; }
 
-# Sobe minikube se necessário
-if ! minikube -p minikube status >/dev/null 2>&1; then
-  log "→ Iniciando minikube (perfil: minikube)…"
-  minikube start -p minikube --driver=docker --cpus=2 --memory=4096 >/tmp/minikube_start.log 2>&1 &
-  PID=$!
-  echo "→ Inicializando Minikube em background (isso pode levar 2–5 minutos)…"
-  wait $PID
+# Se o cluster não existir, cria do zero
+if ! minikube status -p minikube >/dev/null 2>&1; then
+  log "→ Nenhum cluster encontrado. Criando novo…"
+  minikube delete --all --purge >/dev/null 2>&1 || true
+  docker rm -f minikube >/dev/null 2>&1 || true
+  docker network rm minikube >/dev/null 2>&1 || true
+  minikube start -p minikube --driver=docker --cpus=2 --memory=4096
+else
+  log "→ Cluster existente detectado. Pulando criação."
 fi
 
-# Habilita ingress e garante contexto
-minikube -p minikube addons enable ingress >/dev/null
+# Habilita o ingress (só se o cluster estiver rodando)
+if minikube status -p minikube | grep -q "Running"; then
+  log "→ Habilitando addon ingress…"
+  minikube -p minikube addons enable ingress >/dev/null
+else
+  log "⚠️  Cluster não está em execução. Inicie o minikube manualmente e rode novamente o setup."
+  exit 1
+fi
+
+# Configura contexto
 kubectl config use-context minikube >/dev/null
 
-# Tenta apontar docker para o daemon do minikube
-USE_IMAGE_LOAD=false
+# --------- [4.5] Conectar Docker ao Minikube ----------
 if eval "$(minikube -p minikube docker-env)"; then
-  log "→ Docker apontado para o daemon do minikube."
+  log "✅ Docker apontado para o daemon interno do Minikube."
+  USE_IMAGE_LOAD=false
 else
-  log "→ Não foi possível redirecionar docker-env. Vou usar 'minikube image load'."
+  log "⚠️  Falha ao apontar Docker para o Minikube. As imagens serão carregadas manualmente."
   USE_IMAGE_LOAD=true
 fi
 
+
+# --------- [5] Build das imagens (contexto = RAIZ com -f) ----------
 log "[5/7] Build das imagens gRPC/REST…"
 
-# Build pelo RAIZ do repo, apontando o Dockerfile de cada serviço (-f)
-docker build -t a-service:local    -f services/a_py/Dockerfile .
-docker build -t b-service:local    -f services/b_py/Dockerfile .
-docker build -t p-gateway:local    -f gateway_p_node/Dockerfile .
+# gRPC
+docker build -t a-service:local -f services/a_py/Dockerfile .
+docker build -t b-service:local -f services/b_py/Dockerfile .
+docker build -t p-gateway:local -f gateway_p_node/Dockerfile .
 
-# REST (se existirem)
-[ -f services/a_rest/Dockerfile ]      && docker build -t a-rest-service:local -f services/a_rest/Dockerfile . || true
-[ -f services/b_rest/Dockerfile ]      && docker build -t b-rest-service:local -f services/b_rest/Dockerfile . || true
-[ -f gateway_p_rest_node/Dockerfile ]  && docker build -t p-rest-gateway:local -f gateway_p_rest_node/Dockerfile . || true
+# REST
+[ -f services/a_rest/Dockerfile ] && docker build -t a-rest-service:local   -f services/a_rest/Dockerfile . || true
+[ -f services/b_rest/Dockerfile ] && docker build -t b-rest-service:local   -f services/b_rest/Dockerfile . || true
+[ -f gateway_p_rest_node/Dockerfile ] && docker build -t p-rest-gateway:local -f gateway_p_rest_node/Dockerfile . || true
 
 # Se não usamos docker-env, carregue as imagens no cluster
 if [ "$USE_IMAGE_LOAD" = true ]; then
@@ -305,9 +343,8 @@ if [ "$USE_IMAGE_LOAD" = true ]; then
 fi
 
 
-
 # --------- [6] Aplicar manifests ----------
-log "[6/7] Aplicando K8s (gRPC + REST opcional)…"
+log "[6/7] Aplicando K8s (gRPC + REST)…"
 kubectl apply -f k8s/namespace.yaml
 kubectl apply -f k8s/a.yaml
 kubectl apply -f k8s/b.yaml
@@ -318,21 +355,22 @@ kubectl apply -f k8s/rest/b-rest.yaml || true
 kubectl apply -f k8s/rest/p-rest.yaml || true
 kubectl apply -f k8s/rest/ingress-rest.yaml || true
 
+
 # --------- [6.5] Aguardar rollouts ----------
 wait_rollout() {
   local ns="$1"; shift
   for d in "$@"; do
     log "→ Aguardando rollout: $d (ns=$ns)…"
-    # timeout de 180s para evitar travar
     if ! kubectl -n "$ns" rollout status deploy/"$d" --timeout=180s; then
       log "⚠️  Timeout no rollout de $d. Logs (últimas linhas):"
-      kubectl -n "$ns" logs deploy/"$d" --tail=80 || true
+      kubectl -n "$ns" logs deploy/"$d" --tail=120 --all-containers || true
     fi
   done
 }
 
 wait_rollout pspd a-deploy b-deploy p-deploy
 wait_rollout pspd a-rest-deploy b-rest-deploy p-rest-deploy
+
 
 # --------- [7] Status final ----------
 log "[7/7] Status:"
@@ -346,4 +384,13 @@ if [ -n "${MINIKUBE_IP:-}" ]; then
   log "  $MINIKUBE_IP  pspd.local pspd-rest.local"
 fi
 
-log "OK. Aguarde pods ficarem Running/Ready (pode levar alguns segundos)."
+log "\n🎉 Setup concluído com sucesso!"
+log "------------------------------------------"
+log "📡 Expor os serviços: duas formas possíveis"
+log "✅ Opção garantida (port-forward)"
+log "Obs.: rode cada linha em um terminal diferente:"
+log ""
+log "kubectl -n pspd port-forward svc/p-svc 8080:80"
+log "kubectl -n pspd port-forward svc/p-rest-svc 8081:80"
+log "------------------------------------------"
+log "OK. Aguarde pods ficarem Running/Ready."

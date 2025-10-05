@@ -10,4 +10,4 @@ COPY gateway_p_rest_node/ .
 
 ENV PORT=8081
 EXPOSE 8081
-CMD ["node", "server.js"]   # ajuste se seu entrypoint tiver outro nome
+CMD ["node", "server.js"]  
