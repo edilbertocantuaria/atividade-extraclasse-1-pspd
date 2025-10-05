@@ -47,7 +47,7 @@ eval $(minikube -p minikube docker-env)
 ### 2. Expor os serviços: duas formas possíveis
 
 #### ✅ Opção garantida (port-forward)
-Obs.: rode cada linha em um terminal diferente
+Obs.: rode cada linha em um terminal diferente (não precisa está na pasta do projeto)
 ```bash
 kubectl -n pspd port-forward svc/p-svc 8080:80
 kubectl -n pspd port-forward svc/p-rest-svc 8081:80
@@ -57,6 +57,9 @@ Acesse:
 - `http://localhost:8080` → Gateway gRPC
 - `http://localhost:8081` → Gateway REST
 
+Caso queira verificar se está com sucesso:
+- `http://localhost:8080//healthz` → Gateway gRPC
+- `http://localhost:8081//healthz` → Gateway REST
 
 ## 3. Testar os serviços
 ```bash
