@@ -63,7 +63,17 @@ Acesse:
 minikube tunnel
 ```
 
-Se falhar, é por bloqueio de portas (80, 443). Tente o método acima.
+Se funcionar, os serviços serão expostos via IP da máquina virtual Minikube.
+
+##### ⚠️ Liberar portas no firewall do Windows
+
+Se ocorrer erro com o `minikube tunnel`, pode ser necessário:
+
+1. Abrir o **Painel de Controle** > **Sistema e Segurança** > **Firewall do Windows Defender**
+2. Clique em **Regras de Entrada** > **Nova Regra**
+3. Escolha **Porta**, clique em **Avançar**
+4. Marque **TCP** e digite `80, 443`
+5. Permitir a conexão > Avançar > selecione todos os perfis > nomeie como `Minikube Tunnel`
 
 ##### (Opcional) Alterar o arquivo `hosts` do Windows
 
@@ -118,4 +128,3 @@ atividade-extraclasse-1-pspd/
 - Todos os pods com status `Running`
 - `http://localhost:8080` e `http://localhost:8081` funcionando
 - Comunicação: HTTP → Gateway → Serviços via gRPC
-
