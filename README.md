@@ -57,104 +57,6 @@ Acesse:
 - `http://localhost:8080` → Gateway gRPC
 - `http://localhost:8081` → Gateway REST
 
-#### 🧪 Tentativa com minikube tunnel (sujeito a firewall)
-```bash
-minikube tunnel
-```
-
-Se falhar, é por bloqueio de portas (80, 443). Tente o método acima.
-
-### ⚙️ (Opcional) Configurar acesso via domínios locais (`pspd.local` e `pspd-rest.local`)
-
-Essas etapas permitem acessar os serviços do Minikube por domínios amigáveis em vez de `localhost`.
-
----
-
-#### 1️⃣ Verificar o IP do Minikube
-```bash
-minikube ip
-```
-
----
-
-#### 2️⃣ Editar o arquivo `hosts` do Windows
-1. Abra o **Bloco de Notas como Administrador**
-2. Vá em **Arquivo → Abrir** e acesse:
-   ```
-   C:\Windows\System32\drivers\etc\hosts
-   ```
-3. No final do arquivo, adicione (substituindo o IP se necessário):
-   ```
-   192.168.49.2 pspd.local
-   192.168.49.2 pspd-rest.local
-   ```
-4. Salve e feche o arquivo.
-
----
-
-#### 3️⃣ Testar o acesso
-- http://pspd.local  
-- http://pspd-rest.local  
-
-Se não funcionar, use `localhost:8080` e `localhost:8081` com `kubectl port-forward`.
-
----
-
-### 🛡️ (Opcional, mas recomendado) Liberar portas 80 e 443 no Firewall do Windows
-
-Necessário se for usar `minikube tunnel` para acessar via domínios locais (`pspd.local`, etc.).
-
----
-
-#### Passo a passo:
-
-1. Pressione `Win + S`, digite **firewall** e abra:
-   ```
-   Firewall do Windows Defender com Segurança Avançada
-   ```
-
-2. No menu à esquerda, clique em:
-   ```
-   Regras de Entrada
-   ```
-
-3. No menu à direita, selecione:
-   ```
-   Nova Regra...
-   ```
-
-4. Escolha:
-   ```
-   Porta → Avançar
-   ```
-
-5. Configure:
-   - Tipo: **TCP**
-   - Porta específica: `80`
-   - Clique em **Avançar**
-
-6. Selecione:
-   ```
-   Permitir a conexão
-   ```
-
-7. Marque todos os perfis:
-   ```
-   ✔️ Domínio ✔️ Particular ✔️ Público
-   ```
-
-8. Nomeie a regra:
-   ```
-   Minikube Tunnel HTTP (porta 80)
-   ```
-
-Clique em **Concluir** ✅  
-
-Repita o processo para a porta **443** (HTTPS), nomeando a porta como:
-```
-Minikube Tunnel HTTPS (porta 443)
-```
-
 
 ## 3. Testar os serviços
 ```bash
@@ -163,6 +65,13 @@ curl "http://localhost:8080/b/numbers?count=5&delay_ms=100"
 
 curl "http://localhost:8081/a/hello?name=FernandoWilliam"
 curl "http://localhost:8081/b/numbers?count=5&delay_ms=100"
+```
+
+## 4. Testes comparativos gRPC vs REST
+Na raiz do projeto, execute
+```bash
+k6 run load/load_grpc_http.js
+k6 run load/load_rest_http.js
 ```
 
 ---
