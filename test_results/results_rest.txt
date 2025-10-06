@@ -1,0 +1,43 @@
+===============================
+ TESTES AUTOMÁTICOS DE CARGA 
+===============================
+
+===== Teste com 25 VUs =====
+    http_req_duration...: avg=28.21s min=28.21s med=28.21s max=28.21s p(90)=28.21s p(95)=28.21s
+    http_reqs...........: 25      0.441284/s
+===============================
+
+===== Teste com 50 VUs =====
+    http_req_duration...: avg=28.43s min=28.43s med=28.43s max=28.44s p(90)=28.44s p(95)=28.44s
+    http_reqs...........: 50      0.879831/s
+===============================
+
+===== Teste com 100 VUs =====
+    http_req_duration...: avg=28.41s min=28.41s med=28.41s max=28.42s p(90)=28.42s p(95)=28.42s
+    http_reqs...........: 100     1.762/s
+===============================
+
+===== Teste com 200 VUs =====
+    http_req_duration...: avg=28.24s min=28.23s med=28.25s max=28.25s p(90)=28.25s p(95)=28.25s
+    http_reqs...........: 200     3.533232/s
+===============================
+
+===== Teste com 400 VUs =====
+    http_req_duration...: avg=28.37s min=28.32s med=28.38s max=28.41s p(90)=28.39s p(95)=28.4s
+    http_reqs...........: 400     7.053362/s
+===============================
+
+===== Teste com 800 VUs =====
+    http_req_duration...: avg=28.35s min=28.24s med=28.35s max=28.41s p(90)=28.4s p(95)=28.4s
+    http_reqs...........: 800     14.121776/s
+===============================
+
+===== Teste com 1600 VUs =====
+    http_req_duration...: avg=28.23s min=28.08s med=28.23s max=28.34s p(90)=28.32s p(95)=28.32s
+    http_reqs...........: 1600    28.243275/s
+===============================
+
+===== Teste com 3200 VUs =====
+    http_req_duration....: avg=28.26s min=27.93s med=28.29s max=28.62s p(90)=28.39s p(95)=28.4s
+    http_reqs............: 3214    56.764479/s
+===============================
