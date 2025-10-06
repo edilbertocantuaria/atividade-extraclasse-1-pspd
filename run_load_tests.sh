@@ -42,10 +42,37 @@ echo "✅ Testes concluídos com sucesso!"
 echo "📂 Resultados salvos em: ${RESULTS_DIR}"
 echo ""
 
-# Executa o script Python para gerar gráficos
+# =============================
+# Execução do script Python
+# =============================
+
 if [ -f "${RESULTS_DIR}/plot_results.py" ]; then
   echo "📊 Gerando gráficos com plot_results.py..."
+
+  # Verifica se Python está instalado
+  if ! command -v python3 &> /dev/null; then
+    echo "🐍 Python3 não encontrado. Instalando..."
+    sudo apt update && sudo apt install -y python3 python3-venv python3-pip
+  fi
+
+  # Cria e ativa ambiente virtual
+  VENV_DIR="${RESULTS_DIR}/venv"
+  if [ ! -d "$VENV_DIR" ]; then
+    echo "⚙️  Criando ambiente virtual..."
+    python3 -m venv "$VENV_DIR"
+  fi
+
+  source "$VENV_DIR/bin/activate"
+
+  # Instala matplotlib e dependências se necessário
+  echo "📦 Instalando dependências Python..."
+  pip install --upgrade pip >/dev/null 2>&1
+  pip install matplotlib pandas numpy >/dev/null 2>&1
+
+  # Executa o script
   python3 "${RESULTS_DIR}/plot_results.py"
+
+  deactivate
   echo "✅ Gráficos gerados em: ${RESULTS_DIR}"
 else
   echo "⚠️  O arquivo plot_results.py não foi encontrado em ${RESULTS_DIR}."

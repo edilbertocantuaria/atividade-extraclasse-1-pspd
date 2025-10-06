@@ -2,6 +2,7 @@
 k8s/*.yaml
 k8s/**/*.yaml
 k8s/
+test_results/venv/
 
 
 # Mantém as pastas no repo (se usar .gitkeep)
